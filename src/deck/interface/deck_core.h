@@ -34,6 +34,9 @@
 
 #include "estimator.h"
 
+/* Forward declaration to avoid circular dependency */
+typedef struct deckDiscoveryBackend_s DeckDiscoveryBackend_t;
+
 /* Maximum number of decks that can be enumerated */
 #define DECK_MAX_COUNT 4
 
@@ -110,6 +113,23 @@ typedef struct deck_driver {
   /* Init and test functions */
   void (*init)(struct deckInfo_s *);
   bool (*test)(void);
+
+  /* Runtime hardware status probe. Return 0 if the deck is healthy, a non-zero
+   * error code otherwise. Set to NULL if the deck has no status probe (it is
+   * then never probed).
+   *
+   * The deck supervisor polls this from the system supervisor's safety path at
+   * the supervisor rate, so it must be cheap and non-blocking (no waits on
+   * mutexes, no slow bus transactions in the call itself - cache results from
+   * the deck task instead).
+   *
+   * IMPORTANT: when CONFIG_DECK_SUPERVISOR is enabled a non-zero return blocks
+   * arming and, while flying, immediately cuts the motors. The result must
+   * therefore be debounced in the driver - a single transient non-zero reading
+   * will trigger the cut, so do not report short, recoverable glitches as an
+   * error. Return non-zero if the deck failed to initialize, since its state
+   * cannot be trusted to be probed. */
+  uint8_t (*status)(void);
 } DeckDriver;
 
 #define DECK_DRIVER(NAME) const struct deck_driver * driver_##NAME __attribute__((section(".deckDriver." #NAME), used)) = &(NAME)
@@ -146,6 +166,20 @@ typedef struct deckInfo_s {
 
   TlvArea tlv;
   const DeckDriver *driver;
+
+  /* Track which discovery backend found this deck */
+  const DeckDiscoveryBackend_t *discoveryBackend;
+  /* Backend-specific context pointer, this is private for each backend */
+  void* backendContext;
+
+  /* Generic deck information fields, NULL if not set */
+  char * productName;
+  char * boardRevision;
+
+  uint8_t production_year;
+  uint8_t production_month;
+  uint8_t production_day;
+
 } DeckInfo;
 
 /**
@@ -176,6 +210,7 @@ typedef bool (deckMemoryRead)(const uint32_t vAddr, const uint8_t len, uint8_t* 
 #define DECK_MEMORY_MASK_STARTED 1
 #define DECK_MEMORY_MASK_UPGRADE_REQUIRED 2
 #define DECK_MEMORY_MASK_BOOT_LOADER_ACTIVE 4
+#define DECK_MEMORY_MASK_SUPPORTS_HOT_RESTART 8
 
 /**
  * @brief Definition of function to query a deck for properties related to memory
@@ -224,15 +259,6 @@ int deckCount(void);
 
 DeckInfo * deckInfo(int i);
 
-/* Key/value area handling */
-bool deckTlvHasElement(TlvArea *tlv, int type);
-
-int deckTlvGetString(TlvArea *tlv, int type, char *string, int maxLength);
-
-char* deckTlvGetBuffer(TlvArea *tlv, int type, int *length);
-
-void deckTlvGetTlv(TlvArea *tlv, int type, TlvArea *output);
-
 /* Defined Types */
 #define DECK_INFO_NAME 1
 #define DECK_INFO_REVISION 2
@@ -256,5 +282,8 @@ StateEstimatorType deckGetRequiredEstimator();
 
 bool deckGetRequiredLowInterferenceRadioMode();
 bool deckGetRequiredKalmanEstimatorAttitudeReversionOff();
+
+// Including deck-discovery.h here to avoid circular dependency
+#include "deck_discovery.h"
 
 #endif //__DECK_CODE_H__

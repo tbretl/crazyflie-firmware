@@ -60,9 +60,9 @@ static void preProcessGeometryData(mat3d bsRot, mat3d bsRotInverted, mat3d lh1Ro
 // Geometry memory handling for the memory module
 static const uint32_t calibStartAddr = 0x1000;
 static const uint32_t pageSize = 0x100;
-static uint32_t handleMemGetSize(void) { return calibStartAddr + sizeof(lighthouseCoreState.bsCalibration); }
-static bool handleMemRead(const uint32_t memAddr, const uint8_t readLen, uint8_t* buffer);
-static bool handleMemWrite(const uint32_t memAddr, const uint8_t writeLen, const uint8_t* buffer);
+static uint32_t handleMemGetSize(const uint8_t internal_id) { return calibStartAddr + sizeof(lighthouseCoreState.bsCalibration); }
+static bool handleMemRead(const uint8_t internal_id, const uint32_t memAddr, const uint8_t readLen, uint8_t* buffer);
+static bool handleMemWrite(const uint8_t internal_id, const uint32_t memAddr, const uint8_t writeLen, const uint8_t* buffer);
 static const MemoryHandlerDef_t memDef = {
   .type = MEM_TYPE_LH,
   .getSize = handleMemGetSize,
@@ -87,7 +87,7 @@ void lighthousePositionEstInit() {
   memoryRegisterHandler(&memDef);
 }
 
-static bool handleMemRead(const uint32_t memAddr, const uint8_t readLen, uint8_t* buffer) {
+static bool handleMemRead(const uint8_t internal_id, const uint32_t memAddr, const uint8_t readLen, uint8_t* buffer) {
   bool result = false;
 
   if (memAddr < calibStartAddr) {
@@ -118,7 +118,7 @@ static bool handleMemRead(const uint32_t memAddr, const uint8_t readLen, uint8_t
   return result;
 }
 
-static bool handleMemWrite(const uint32_t memAddr, const uint8_t writeLen, const uint8_t* buffer) {
+static bool handleMemWrite(const uint8_t internal_id, const uint32_t memAddr, const uint8_t writeLen, const uint8_t* buffer) {
   bool result = false;
 
   if (memAddr < calibStartAddr) {
@@ -221,6 +221,8 @@ static positionMeasurement_t ext_pos;
 static float sweepStd = 0.0004;
 static float sweepStdLh2 = 0.001;
 
+static uint8_t enableEstimator = 1;
+
 static vec3d position;
 static vec3d positionLog;
 static float deltaLog;
@@ -250,7 +252,9 @@ static void estimatePositionCrossingBeams(const pulseProcessor_t *state, pulsePr
         ext_pos.z += position[2];
         sensorsUsed++;
 
-        STATS_CNT_RATE_EVENT(&positionRate);
+        if (enableEstimator) {
+          STATS_CNT_RATE_EVENT(&positionRate);
+        }
       }
     }
   }
@@ -270,7 +274,7 @@ static void estimatePositionCrossingBeams(const pulseProcessor_t *state, pulsePr
     positionLog[2] = ext_pos.z;
 
     // Make sure we feed sane data into the estimator
-    if (isfinite(ext_pos.pos[0]) && isfinite(ext_pos.pos[1]) && isfinite(ext_pos.pos[2])) {
+    if (enableEstimator && isfinite(ext_pos.pos[0]) && isfinite(ext_pos.pos[1]) && isfinite(ext_pos.pos[2])) {
       ext_pos.stdDev = 0.01;
       ext_pos.source = MeasurementSourceLighthouse;
       #ifndef CONFIG_DECK_LIGHTHOUSE_AS_GROUNDTRUTH
@@ -305,10 +309,12 @@ static void estimatePositionSweepsLh1(const pulseProcessor_t* appState, pulsePro
         sweepInfo.sweepId = 0;
 
         #ifndef CONFIG_DECK_LIGHTHOUSE_AS_GROUNDTRUTH
-          estimatorEnqueueSweepAngles(&sweepInfo);
+          if (enableEstimator) {
+            estimatorEnqueueSweepAngles(&sweepInfo);
 
-          STATS_CNT_RATE_EVENT(bsEstRates[baseStation]);
-          STATS_CNT_RATE_EVENT(&positionRate);
+            STATS_CNT_RATE_EVENT(bsEstRates[baseStation]);
+            STATS_CNT_RATE_EVENT(&positionRate);
+          }
         #endif
       }
 
@@ -320,10 +326,12 @@ static void estimatePositionSweepsLh1(const pulseProcessor_t* appState, pulsePro
         sweepInfo.sweepId = 1;
 
         #ifndef CONFIG_DECK_LIGHTHOUSE_AS_GROUNDTRUTH
-          estimatorEnqueueSweepAngles(&sweepInfo);
+          if (enableEstimator) {
+            estimatorEnqueueSweepAngles(&sweepInfo);
 
-          STATS_CNT_RATE_EVENT(bsEstRates[baseStation]);
-          STATS_CNT_RATE_EVENT(&positionRate);
+            STATS_CNT_RATE_EVENT(bsEstRates[baseStation]);
+            STATS_CNT_RATE_EVENT(&positionRate);
+          }
         #endif
       }
     }
@@ -352,10 +360,12 @@ static void estimatePositionSweepsLh2(const pulseProcessor_t* appState, pulsePro
         sweepInfo.calib = &bsCalib->sweep[0];
         sweepInfo.sweepId = 0;
         #ifndef CONFIG_DECK_LIGHTHOUSE_AS_GROUNDTRUTH
-          estimatorEnqueueSweepAngles(&sweepInfo);
+          if (enableEstimator) {
+            estimatorEnqueueSweepAngles(&sweepInfo);
 
-          STATS_CNT_RATE_EVENT(bsEstRates[baseStation]);
-          STATS_CNT_RATE_EVENT(&positionRate);
+            STATS_CNT_RATE_EVENT(bsEstRates[baseStation]);
+            STATS_CNT_RATE_EVENT(&positionRate);
+          }
         #endif
       }
 
@@ -365,10 +375,12 @@ static void estimatePositionSweepsLh2(const pulseProcessor_t* appState, pulsePro
         sweepInfo.calib = &bsCalib->sweep[1];
         sweepInfo.sweepId = 1;
         #ifndef CONFIG_DECK_LIGHTHOUSE_AS_GROUNDTRUTH
-          estimatorEnqueueSweepAngles(&sweepInfo);
+          if (enableEstimator) {
+            estimatorEnqueueSweepAngles(&sweepInfo);
 
-          STATS_CNT_RATE_EVENT(bsEstRates[baseStation]);
-          STATS_CNT_RATE_EVENT(&positionRate);
+            STATS_CNT_RATE_EVENT(bsEstRates[baseStation]);
+            STATS_CNT_RATE_EVENT(&positionRate);
+          }
         #endif
       }
     }
@@ -453,7 +465,7 @@ static void estimateYaw(const pulseProcessor_t *state, pulseProcessorResult_t* a
 
   // Calculate yaw delta using only one base station for now
   float yawDelta;
-  if (estimateYawDeltaOneBaseStation(baseStation, angles, state->bsGeometry, cfPos, n, &RR, &yawDelta)) {
+  if (enableEstimator && estimateYawDeltaOneBaseStation(baseStation, angles, state->bsGeometry, cfPos, n, &RR, &yawDelta)) {
     #ifndef CONFIG_DECK_LIGHTHOUSE_AS_GROUNDTRUTH
       yawErrorMeasurement_t yawDeltaMeasurement = {.yawError = yawDelta, .stdDev = 0.01};
       estimatorEnqueueYawError(&yawDeltaMeasurement);
@@ -503,4 +515,11 @@ PARAM_ADD_CORE(PARAM_FLOAT, sweepStd, &sweepStd)
  * @brief Standard deviation Sweep angles Lighthouse V2
  */
 PARAM_ADD_CORE(PARAM_FLOAT, sweepStd2, &sweepStdLh2)
+/**
+ * @brief Feed lighthouse measurements into the state estimator (default: 1)
+ *
+ * Set to 0 to stop pushing lighthouse position/sweep measurements into the
+ * Kalman filter, while keeping the lighthouse system otherwise running.
+ */
+PARAM_ADD_CORE(PARAM_UINT8, fwdToEstimator, &enableEstimator)
 PARAM_GROUP_STOP(lighthouse)

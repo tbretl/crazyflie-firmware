@@ -25,6 +25,10 @@
 #include "outlierFilterTdoa.h"
 #include "kalman_core.h"
 #include "mm_tdoa.h"
+#include "mm_pose.h"
+#include "mm_tof.h"
+#include "mm_flow.h"
+#include "mm_distance.h"
 %}
 
 %include "math3d.h"
@@ -42,6 +46,10 @@
 %include "outlierFilterTdoa.h"
 %include "kalman_core.h"
 %include "mm_tdoa.h"
+%include "mm_pose.h"
+%include "mm_tof.h"
+%include "mm_flow.h"
+%include "mm_distance.h"
 
 
 %inline %{
