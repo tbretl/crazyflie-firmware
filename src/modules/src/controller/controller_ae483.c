@@ -18,6 +18,7 @@ static float flow_dpixely = 0.0f;
 // Parameters
 static bool use_observer = false;
 static bool reset_observer = false;
+static bool gains_are_set = false;
 
 
 void ae483UpdateWithTOF(tofMeasurement_t *tof)
@@ -129,4 +130,5 @@ LOG_GROUP_STOP(ae483log)
 PARAM_GROUP_START(ae483par)
 PARAM_ADD(PARAM_UINT8,     use_observer,            &use_observer)
 PARAM_ADD(PARAM_UINT8,     reset_observer,          &reset_observer)
+PARAM_ADD(PARAM_UINT8,     gains_are_set,           &gains_are_set)
 PARAM_GROUP_STOP(ae483par)
