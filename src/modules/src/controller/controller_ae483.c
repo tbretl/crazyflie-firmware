@@ -118,14 +118,14 @@ void controllerAE483(control_t *control,
   control->m4 = 0;
 }
 
-//              1234567890123456789012345678 <-- max total length
+//              1234567890123456789012345 <-- max total length
 //              group   .name
 LOG_GROUP_START(ae483log)
 LOG_ADD(LOG_UINT16,      num_tof,                &tof_count)
 LOG_ADD(LOG_UINT16,      num_flow,               &flow_count)
 LOG_GROUP_STOP(ae483log)
 
-//                1234567890123456789012345678 <-- max total length
+//                1234567890123456789012345 <-- max total length
 //                group   .name
 PARAM_GROUP_START(ae483par)
 PARAM_ADD(PARAM_UINT8,     use_observer,            &use_observer)
